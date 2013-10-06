@@ -1,0 +1,526 @@
+/**
+ *	\file
+ */
+ 
+ 
+#pragma once
+
+
+#include <exception>
+#include <functional>
+#include <new>
+#include <initializer_list>
+#include <type_traits>
+#include <utility>
+ 
+ 
+namespace std {
+
+
+	class nullopt_t {	};
+	
+	
+	constexpr nullopt_t nullopt;
+	
+	
+	class in_place_t {	};
+	
+	
+	constexpr in_place_t in_place;
+	
+	
+	class bad_optional_access : public exception {	};
+
+
+	template <typename T>
+	class optional {
+	
+	
+		private:
+		
+		
+			bool is_null;
+			//	Union leaves us responsible
+			//	for lifetime management
+			union {
+				T element;
+			};
+			
+			
+			//	Destroys the contained element
+			//	if it exists, otherwise does
+			//	nothing
+			inline void destroy () noexcept {
+			
+				if (!is_null) {
+				
+					element.~T();
+				
+					is_null=true;
+				
+				}
+			
+			}
+	
+	
+		public:
+		
+		
+			typedef T value_type;
+			
+			
+			constexpr optional () noexcept : is_null(true) {	}
+			
+			
+			constexpr optional (nullopt_t) noexcept : is_null(true) {	}
+			
+			
+			optional (const optional & other) noexcept(
+				is_nothrow_copy_constructible<T>::value
+			) {
+			
+				is_null=other.is_null;
+				
+				if (!is_null) new (&element) T (other.element);
+			
+			}
+			
+			
+			optional (optional && other) noexcept(
+				is_nothrow_move_constructible<T>::value
+			) {
+			
+				is_null=other.is_null;
+				
+				if (!is_null) new (&element) T (move(other.element));
+			
+			}
+			
+			
+			optional (const T & value) noexcept(
+				is_nothrow_copy_constructible<T>::value
+			) : is_null(false) {
+			
+				new (&element) T (value);
+			
+			}
+			
+			
+			optional (T && value) noexcept(
+				is_nothrow_move_constructible<T>::value
+			) : is_null(false) {
+			
+				new (&element) T (move(value));
+			
+			}
+			
+			
+			template <typename... Args>
+			explicit optional (in_place_t, Args &&... args) noexcept(
+				is_nothrow_constructible<
+					T,
+					Args...
+				>::value
+			) : is_null(false) {
+			
+				new (&element) T (forward<Args>(args)...);
+			
+			}
+			
+			
+			template <typename U, typename... Args>
+			explicit optional (
+				in_place_t,
+				typename enable_if<
+					is_constructible<
+						T,
+						initializer_list<U> &,
+						Args &&...
+					>::value,
+					initializer_list<U>
+				>::type ilist,
+				Args &&... args
+			) noexcept (
+				is_nothrow_constructible<
+					T,
+					initializer_list<U> &,
+					Args...
+				>::value
+			) : is_null(false) {
+			
+				new (&element) T (ilist,forward<Args>(args)...);
+			
+			}
+			
+			
+			~optional () noexcept {
+			
+				destroy();
+			
+			}
+			
+			
+			optional & operator = (nullopt_t) noexcept {
+			
+				destroy();
+				
+				return *this;
+			
+			}
+			
+			
+			optional & operator = (const optional & other) noexcept (
+				std::is_nothrow_copy_constructible<T>::value
+			) {
+			
+				if (&other!=this) {
+			
+					destroy();
+					
+					if (!other.is_null) {
+					
+						new (&element) T (other.element);
+						
+						is_null=false;
+						
+					}
+					
+				}
+				
+				return *this;
+			
+			}
+			
+			
+			optional & operator = (optional && other) noexcept(
+				std::is_nothrow_move_constructible<T>::value
+			) {
+			
+				if (&other!=this) {
+			
+					destroy();
+					
+					if (!other.is_null) {
+					
+						new (&element) T (move(other.element));
+						
+						is_null=false;
+						
+					}
+					
+				}
+				
+				return *this;
+			
+			}
+			
+			
+			template <typename U>
+			typename enable_if<
+				!is_same<
+					typename decay<U>::type,
+					optional<T>
+				>::value,
+				optional &
+			>::type operator = (U && value) noexcept(
+				is_nothrow_constructible<
+					T,
+					U
+				>::value &&
+				is_nothrow_assignable<
+					T,
+					U
+				>::value
+			) {
+			
+				if (is_null) {
+				
+					new (&element) T (forward<U>(value));
+					
+					is_null=false;
+					
+				} else {
+				
+					element=forward<U>(value);
+					
+				}
+				
+				return *this;
+			
+			}
+			
+			
+			const T * operator -> () const noexcept {
+			
+				return &element;
+			
+			}
+			
+			
+			T * operator -> () noexcept {
+			
+				return &element;
+			
+			}
+			
+			
+			const T & operator * () const noexcept {
+			
+				return element;
+			
+			}
+			
+			
+			T & operator * () noexcept {
+			
+				return element;
+			
+			}
+			
+			
+			operator bool () const noexcept {
+			
+				return !is_null;
+			
+			}
+			
+			
+			const T & value () const {
+			
+				if (is_null) throw bad_optional_access();
+				
+				return element;
+			
+			}
+			
+			
+			T & value () {
+			
+				if (is_null) throw bad_optional_access();
+				
+				return element;
+			
+			}
+			
+			
+			template <typename U>
+			T value_or (U && value) const noexcept(
+				is_nothrow_constructible<
+					T,
+					U
+				>::value &&
+				is_nothrow_move_constructible<T>::value
+			) {
+			
+				return is_null ? T(forward<U>(value)) : element;
+			
+			}
+			
+			
+			template <typename... Args>
+			void emplace (Args &&... args) noexcept(
+				std::is_nothrow_constructible<T,Args...>::value
+			) {
+			
+				destroy();
+				
+				new (&element) T (forward<Args>(args)...);
+				
+				is_null=false;
+			
+			}
+			
+			
+			template <typename U, typename... Args>
+			void emplace (initializer_list<U> ilist, Args &&... args) noexcept(
+				std::is_nothrow_constructible<
+					T,
+					initializer_list<U> &,
+					Args...
+				>::value
+			) {
+			
+				destroy();
+				
+				new (&element) T (ilist,forward<Args>(args)...);
+				
+				is_null=false;
+			
+			}
+			
+			
+			void swap (optional & other) noexcept(
+				std::is_nothrow_move_constructible<T>::value &&
+				noexcept(swap(declval<T &>(),declval<T &>()))
+			) {
+			
+				if (other.is_null && is_null) return;
+				
+				if (!(other.is_null || is_null)) {
+				
+					std::swap(element,other.element);
+				
+				} else if (is_null) {
+				
+					new (&element) T (move(other.element));
+					
+					is_null=false;
+					
+					other.destroy();
+				
+				} else {
+				
+					new (&other.element) T (move(element));
+					
+					other.is_null=false;
+					
+					destroy();
+				
+				}
+			
+			}
+	
+	
+	};
+	
+	
+	template <typename T>
+	bool operator == (const optional<T> & lhs, const optional<T> & rhs) noexcept(
+		noexcept(declval<T>()==declval<T>())
+	) {
+	
+		return (
+			!(lhs || rhs) ||
+			(rhs && lhs && (*rhs==*lhs))
+		);
+	
+	}
+	
+	
+	template <typename T>
+	bool operator < (const optional<T> & lhs, const optional<T> & rhs) noexcept(
+		noexcept(declval<T>()<declval<T>())
+	) {
+	
+		if (lhs) return rhs ? (*lhs<*rhs) : false;
+		else return rhs;
+	
+	}
+	
+	
+	template <typename T>
+	bool operator == (const optional<T> & lhs, nullopt_t) noexcept {
+	
+		return !lhs;
+	
+	}
+	
+	
+	template <typename T>
+	bool operator == (nullopt_t, const optional<T> & rhs) noexcept {
+	
+		return !rhs;
+	
+	}
+	
+	
+	template <typename T>
+	bool operator < (const optional<T> & lhs, nullopt_t) noexcept {
+	
+		return false;
+	
+	}
+	
+	
+	template <typename T>
+	bool operator < (nullopt_t, const optional<T> & rhs) noexcept {
+	
+		return rhs;
+	
+	}
+	
+	
+	template <typename T>
+	bool operator == (const optional<T> & opt, const T & v) noexcept(
+		noexcept(declval<T>()==declval<T>())
+	) {
+	
+		if (!opt) return false;
+		
+		return *opt==v;
+	
+	}
+	
+	
+	template <typename T>
+	bool operator == (const T & v, const optional<T> & opt) noexcept(
+		noexcept(declval<T>()==declval<T>())
+	) {
+	
+		return opt==v;
+	
+	}
+	
+	
+	template <typename T>
+	bool operator < (const optional<T> & opt, const T & v) noexcept(
+		noexcept(declval<T>()<declval<T>())
+	) {
+	
+		if (!opt) return true;
+		
+		return *opt<v;
+	
+	}
+	
+	
+	template <typename T>
+	optional<typename decay<T>::type> make_optional (T && value) noexcept(
+		noexcept(optional<typename decay<T>::type>(forward<T>(value))) &&
+		is_nothrow_move_constructible<optional<typename decay<T>::type>>::value
+	) {
+	
+		return optional<typename decay<T>::type>(forward<T>(value));
+	
+	}
+	
+	
+	template <typename T>
+	class hash<optional<T>> {
+	
+	
+		public:
+		
+		
+			typedef optional<T> Key;
+			typedef size_t result_type;
+		
+		
+			size_t operator () (const optional<T> & opt) const noexcept(
+				noexcept(
+					declval<hash<typename decay<T>::type>>()(
+						declval<typename decay<T>::type>()
+					)
+				)
+			) {
+			
+				if (!opt) return 0;
+				
+				return hash<typename decay<T>::type>()(*opt);
+			
+			}
+	
+	
+	};
+	
+	
+	template <typename T>
+	void swap (optional<T> & lhs, optional<T> & rhs) noexcept(noexcept(lhs.swap(rhs))) {
+	
+		lhs.swap(rhs);
+	
+	}
+
+
+}
+ 
