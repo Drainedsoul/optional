@@ -17,13 +17,31 @@
 namespace std {
 
 
-	class nullopt_t {	};
+	class nullopt_t {
+	
+	
+		public:
+		
+		
+			constexpr nullopt_t () noexcept {	};
+	
+	
+	};
 	
 	
 	constexpr nullopt_t nullopt;
 	
 	
-	class in_place_t {	};
+	class in_place_t {
+	
+	
+		public:
+		
+		
+			constexpr in_place_t () noexcept {	};
+	
+	
+	};
 	
 	
 	constexpr in_place_t in_place;
