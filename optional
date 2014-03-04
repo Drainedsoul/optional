@@ -97,22 +97,14 @@ namespace std {
 			}
 			
 			
-			optional (const T & value) noexcept(
+			constexpr optional (const T & value) noexcept(
 				is_nothrow_copy_constructible<T>::value
-			) : is_null(false) {
-			
-				new (&element) T (value);
-			
-			}
+			) : is_null(false), element(value) {	}
 			
 			
-			optional (T && value) noexcept(
+			constexpr optional (T && value) noexcept(
 				is_nothrow_move_constructible<T>::value
-			) : is_null(false) {
-			
-				new (&element) T (move(value));
-			
-			}
+			) : is_null(false), element(std::move(value)) {	}
 			
 			
 			template <typename... Args>
