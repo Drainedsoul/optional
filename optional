@@ -496,7 +496,7 @@ namespace std {
 	
 	
 	template <typename T>
-	class hash<optional<T>> {
+	struct hash<optional<T>> {
 	
 	
 		public:
